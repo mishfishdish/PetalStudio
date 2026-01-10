@@ -95,7 +95,7 @@ function About() {
           <div className="profile-image-container">
             <div className="profile-circle"></div>
           </div>
-          <p>I’m Michelle, a Melbourne-based software developer with 5 years of experience. This is where I experiment, grow, and build meaningful digital products — with a focus on empowering women to become the best version of themselves.</p>
+          <p>I’m Michelle, a Melbourne-based software developer with 5 years of experience. This is where I experiment, grow, and build meaningful digital products ~ with a focus on empowering women to become the best version of themselves.</p>
         </div>
         <div className="timeline" ref={timelineRef}>
           {timelineItems.map((item, index) => (
