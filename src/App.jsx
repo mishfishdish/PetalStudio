@@ -1,10 +1,37 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
+import daydreamIcon from './assets/daydream-icon.png'
 
 function Home() {
   return (
     <div className="page-content">
-      <p className="exploring-text"> 𓆸 coming soon...</p>
+      <div className="apps-grid">
+        <button className="app-card">
+          <img
+            src={daydreamIcon}
+            alt="Daydream app icon"
+            className="app-icon-image"
+          />
+          <span className="app-name">daydream ☁️</span>
+          <span className="app-description">a dreamy vision board widget maker</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PrivacyPolicy() {
+  return (
+    <div className="page-content">
+      <h2>Privacy Policy for Daydream</h2>
+      <p>Daydream does not collect, store, or share personal information.</p>
+      <p>
+        All vision boards and images created in the app are stored locally on your device.
+        The app does not use analytics, tracking tools, or third-party advertising services.
+      </p>
+      <p>
+        If you have questions, contact: <a href="mailto:ptlsstudio@gmail.com">ptlsstudio@gmail.com</a>
+      </p>
     </div>
   )
 }
@@ -119,6 +146,19 @@ function About() {
 }
 
 function App() {
+  const isPrivacyRoute =
+    typeof window !== 'undefined' && window.location.pathname === '/daydream-privacy'
+
+  if (isPrivacyRoute) {
+    return (
+      <div className="app">
+        <main className="main-content">
+          <PrivacyPolicy />
+        </main>
+      </div>
+    )
+  }
+
   const [activeTab, setActiveTab] = useState('home')
 
   return (
