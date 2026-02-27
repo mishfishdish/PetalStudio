@@ -147,14 +147,25 @@ function About() {
 }
 
 function App() {
-  const isPrivacyRoute =
-    typeof window !== 'undefined' && window.location.pathname === '/daydream-privacy'
+  const path = typeof window !== 'undefined' ? window.location.pathname : '/'
+  const isPrivacyRoute = path === '/daydream-privacy'
+  const isFlowerRoute = path === '/flowerbooth'
 
   if (isPrivacyRoute) {
     return (
       <div className="app">
         <main className="main-content">
           <PrivacyPolicy />
+        </main>
+      </div>
+    )
+  }
+
+  if (isFlowerRoute) {
+    return (
+      <div className="app">
+        <main className="main-content">
+          <FlowerBooth />
         </main>
       </div>
     )

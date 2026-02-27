@@ -350,8 +350,7 @@ export default function FlowerBooth() {
     <div
       style={{
         minHeight: "100vh",
-        background:
-          "radial-gradient(circle at top left, rgba(255, 182, 211, 0.4), transparent 55%), radial-gradient(circle at bottom right, rgba(255, 244, 250, 0.9), #ffffff)",
+        background: "#ffffff",
         color: "#3c2330",
         display: "grid",
         placeItems: "center",
