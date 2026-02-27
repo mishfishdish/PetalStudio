@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import daydreamIcon from './assets/daydream-icon.png'
+import FlowerBooth from './FlowerBooth'
 
 function Home() {
   return (
@@ -179,6 +180,12 @@ function App() {
             >
               About
             </button>
+            <button 
+              className={`tab ${activeTab === 'flower' ? 'active' : ''}`}
+              onClick={() => setActiveTab('flower')}
+            >
+              FlowerBooth
+            </button>
           </nav>
         </div>
       </header>
@@ -186,6 +193,7 @@ function App() {
       <main className="main-content">
         {activeTab === 'home' && <Home />}
         {activeTab === 'about' && <About />}
+        {activeTab === 'flower' && <FlowerBooth />}
       </main>
     </div>
   )
