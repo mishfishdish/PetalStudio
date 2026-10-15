@@ -16,7 +16,7 @@
 
 // Wire a dry-contact, opto-isolated relay across the garage wall-button terminals.
 // Most relay modules are active LOW. Change these values if yours is active HIGH.
-constexpr uint8_t RELAY_PIN = 5;
+constexpr uint8_t RELAY_PIN = 26;
 constexpr uint8_t RELAY_ACTIVE = LOW;
 constexpr uint8_t RELAY_IDLE = HIGH;
 constexpr unsigned long RELAY_PULSE_MS = 500;
