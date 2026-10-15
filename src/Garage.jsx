@@ -1,83 +1,45 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
-const SOCKET_URL = import.meta.env.VITE_GARAGE_WEBSOCKET_URL
+const API_URL = 'https://yjhctwilgmjsmbelmyrj.supabase.co/functions/v1/garage-command'
 
 export default function Garage() {
   const [key, setKey] = useState(() => sessionStorage.getItem('garage-key') || '')
   const [savedKey, setSavedKey] = useState(() => sessionStorage.getItem('garage-key') || '')
   const [status, setStatus] = useState('idle')
   const [message, setMessage] = useState('Ready when you are')
-  const [controllerOnline, setControllerOnline] = useState(false)
-  const socketRef = useRef(null)
-  const retryRef = useRef(null)
-  const pendingCommandRef = useRef(null)
+
+  const request = useCallback(async (options = {}) => {
+    const response = await fetch(API_URL, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${savedKey}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error || 'Garage service unavailable')
+    return data
+  }, [savedKey])
 
   useEffect(() => {
-    if (!savedKey) return undefined
-    let stopped = false
-
-    const connect = () => {
-      if (stopped) return
-      if (!SOCKET_URL) {
+    if (!savedKey) return
+    let cancelled = false
+    setStatus('connecting')
+    setMessage('Connecting to Supabase Realtime…')
+    request()
+      .then(() => {
+        if (cancelled) return
+        setStatus('idle')
+        setMessage('Connected — ready to send')
+      })
+      .catch((error) => {
+        if (cancelled) return
         setStatus('error')
-        setMessage('WebSocket relay is not configured')
-        return
-      }
-
-      setStatus('connecting')
-      setMessage('Connecting to garage…')
-      const socket = new WebSocket(SOCKET_URL)
-      socketRef.current = socket
-
-      socket.addEventListener('open', () => {
-        socket.send(JSON.stringify({ type: 'auth', role: 'client', key: savedKey }))
+        setMessage(error.message)
       })
-
-      socket.addEventListener('message', (event) => {
-        const data = JSON.parse(event.data)
-        if (data.type === 'ready' || data.type === 'controller-status') {
-          const online = data.controllerOnline ?? data.online
-          setControllerOnline(online)
-          setStatus(online ? 'idle' : 'error')
-          setMessage(online ? 'Connected — controller online' : 'Garage controller is offline')
-        }
-        if (data.type === 'delivered' && data.id === pendingCommandRef.current) {
-          setStatus('sent')
-          setMessage('Command delivered — the door should respond now')
-        }
-        if (data.type === 'ack' && data.id === pendingCommandRef.current) {
-          pendingCommandRef.current = null
-          setStatus('sent')
-          setMessage('Garage relay activated')
-        }
-        if (data.type === 'error') {
-          setStatus('error')
-          setMessage(data.message || 'Garage command failed')
-        }
-      })
-
-      socket.addEventListener('close', (event) => {
-        socketRef.current = null
-        setControllerOnline(false)
-        if (stopped) return
-        setStatus('error')
-        setMessage(event.code === 4003 ? 'Incorrect access key' : 'Connection lost — reconnecting…')
-        retryRef.current = window.setTimeout(connect, 2000)
-      })
-
-      socket.addEventListener('error', () => {
-        setStatus('error')
-        setMessage('Could not connect to the garage relay')
-      })
-    }
-
-    connect()
-    return () => {
-      stopped = true
-      window.clearTimeout(retryRef.current)
-      socketRef.current?.close()
-    }
-  }, [savedKey])
+    return () => { cancelled = true }
+  }, [request, savedKey])
 
   const unlock = (event) => {
     event.preventDefault()
@@ -87,20 +49,23 @@ export default function Garage() {
     setSavedKey(trimmedKey)
   }
 
-  const triggerGarage = () => {
-    const socket = socketRef.current
-    if (!controllerOnline || socket?.readyState !== WebSocket.OPEN) return
-
-    const id = crypto.randomUUID()
-    pendingCommandRef.current = id
+  const triggerGarage = async () => {
+    if (status === 'sending' || status === 'connecting') return
     setStatus('sending')
     setMessage('Sending command…')
-    socket.send(JSON.stringify({ type: 'command', action: 'pulse', id, issuedAt: Date.now() }))
+    try {
+      await request({ method: 'POST', body: JSON.stringify({ action: 'pulse' }) })
+      setStatus('sent')
+      setMessage('Command broadcast — the door should respond now')
+      window.setTimeout(() => setStatus('idle'), 3000)
+    } catch (error) {
+      setStatus('error')
+      setMessage(error.message)
+    }
   }
 
   const forgetKey = () => {
     sessionStorage.removeItem('garage-key')
-    socketRef.current?.close()
     setSavedKey('')
     setKey('')
     setStatus('idle')
@@ -134,7 +99,7 @@ export default function Garage() {
           <span className={`garage-dot ${status}`} aria-hidden="true" />
         </div>
         <div className="garage-door" aria-hidden="true"><div className="garage-door-frame"><span /><span /><span /><span /></div></div>
-        <button className={`garage-trigger ${status}`} type="button" onClick={triggerGarage} disabled={!controllerOnline || status === 'sending'}>
+        <button className={`garage-trigger ${status}`} type="button" onClick={triggerGarage} disabled={status === 'sending' || status === 'connecting' || status === 'error'}>
           <span className="garage-trigger-icon">↑</span>
           <span>{status === 'sending' ? 'Sending…' : 'Open / close'}</span>
         </button>

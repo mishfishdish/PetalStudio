@@ -1,42 +1,22 @@
 # PetalStudio garage control
 
-The `/garage` page and ESP controller communicate through an authenticated, persistent WebSocket. Commands are pushed immediately; there is no HTTP polling or command queue.
+The `/garage` page sends an authenticated command to a Supabase Edge Function. The function broadcasts it through Supabase Realtime, and the ESP receives it immediately over a persistent secure WebSocket. There is no polling or stored command queue.
 
 ## Architecture
 
 ```text
-Netlify /garage ──wss──┐
-                       ├── WebSocket relay ── command/ack
-ESP32 controller ─wss──┘
+Netlify /garage → Supabase Edge Function → Realtime Broadcast
+                                                ↓ wss
+                                        ESP32 controller
 ```
 
-Netlify hosts the frontend only. A long-running WebSocket relay must be deployed to a WebSocket-capable service. `relay/server.mjs` and `render.yaml` are provided for Render.
+The Edge Function is deployed as `garage-command` in Supabase project `yjhctwilgmjsmbelmyrj`. Its source is committed at `supabase/functions/garage-command/index.ts`.
 
-## 1. Deploy the WebSocket relay
+## ESP setup
 
-1. In Render, create a Blueprint from this GitHub repository using `render.yaml`.
-2. When prompted for `GARAGE_API_KEY`, paste the existing generated garage key.
-3. Deploy the service and copy its hostname, for example `petalstudio-garage-relay.onrender.com`.
-4. Its health URL should return JSON: `https://YOUR-RELAY.onrender.com/`.
-5. Its WebSocket URL is `wss://YOUR-RELAY.onrender.com/garage`.
+Install in Arduino IDE:
 
-Keep the relay at one instance. It stores only live connections in memory and does not store commands. If the ESP is offline, the button reports that the controller is offline and nothing is queued.
-
-## 2. Configure Netlify
-
-Add this build environment variable and redeploy:
-
-```text
-VITE_GARAGE_WEBSOCKET_URL=wss://YOUR-RELAY.onrender.com/garage
-```
-
-The frontend asks for the garage access key at runtime and keeps it only in `sessionStorage`. Do not put `GARAGE_API_KEY` in a `VITE_` variable, because Vite variables are public browser code.
-
-## 3. Configure the ESP
-
-Install these in Arduino IDE:
-
-- ESP32 or ESP8266 board support
+- ESP32 board support
 - **WebSockets by Markus Sattler** (`arduinoWebSockets`)
 
 Copy `firmware/garage_controller/secrets.h.example` to `secrets.h`, then configure:
@@ -44,35 +24,39 @@ Copy `firmware/garage_controller/secrets.h.example` to `secrets.h`, then configu
 ```cpp
 #define WIFI_SSID "your-wifi-name"
 #define WIFI_PASSWORD "your-wifi-password"
-#define GARAGE_API_KEY "same-key-used-on-render"
-#define WEBSOCKET_HOST "YOUR-RELAY.onrender.com"
-#define WEBSOCKET_PORT 443
-#define WEBSOCKET_PATH "/garage"
+#define GARAGE_API_KEY "your-existing-garage-key"
+
+#define SUPABASE_HOST "yjhctwilgmjsmbelmyrj.supabase.co"
+#define SUPABASE_PUBLISHABLE_KEY "your-project-publishable-key"
+#define SUPABASE_CHANNEL "your-private-garage-channel"
 ```
 
-Upload `garage_controller.ino` and open Serial Monitor at 115200 baud. A healthy connection prints:
+The real local `secrets.h` has already been populated and is excluded from Git. Upload `garage_controller.ino`, then open Serial Monitor at 115200 baud. A healthy connection prints:
 
 ```text
 Connected. IP: 192.168.x.x
-WebSocket connected — authenticating
-WebSocket authenticated and ready
+Supabase WebSocket connected — joining garage channel
+Supabase Realtime channel ready
 ```
+
+## Security design
+
+- The browser authenticates to the Edge Function with `GARAGE_API_KEY`, kept only in `sessionStorage`.
+- The function source stores only a SHA-256 digest of that high-entropy key, not the plaintext key.
+- Supabase's service-role key remains inside the Edge Function runtime and is never sent to the browser or ESP.
+- The ESP uses a publishable Supabase key, which is safe for public clients, plus a random 192-bit channel capability stored only in its ignored `secrets.h` and the Edge Function.
+- The channel is receive-only from the ESP's perspective. Commands can only be published through the authenticated Edge Function.
+- Realtime messages are not replayed or queued, so an old command cannot activate the door after the ESP reconnects.
+- Command IDs prevent duplicate pulses during one ESP session.
+
+The firmware uses `beginSSL` without pinning a CA certificate. Traffic is encrypted, but the ESP does not validate Supabase's identity. Before permanent use, switch to the Arduino WebSockets library's CA-certificate or certificate-bundle setup for your selected ESP core.
 
 ## Relay wiring and safety
 
-The sketch uses GPIO 26 and produces a 500 ms active-low pulse. Use a dry-contact, opto-isolated relay wired across the opener's low-voltage wall-button terminals. Never connect the ESP to mains voltage or directly to the motor. Some encoded wall controls require a compatible interface or a spare remote whose button contacts can be bridged.
-
-The relay returns to idle after every pulse and starts idle before networking. Commands contain unique IDs so duplicate WebSocket delivery cannot pulse twice during one ESP session. The relay does not store commands, which prevents an old command from operating the door after the controller reconnects.
-
-The starter firmware calls `beginSSL` without a CA certificate: traffic is encrypted, but the ESP does not validate the relay certificate. Before permanent use, switch to the library's CA-certificate or certificate-bundle setup for your selected ESP Arduino core.
+The sketch uses GPIO 26 and produces a 500 ms active-low pulse. Use a dry-contact, opto-isolated relay across the opener's low-voltage wall-button terminals. Never connect the ESP to mains voltage or directly to the motor. Some encoded wall controls require a compatible interface or a spare remote whose button contacts can be bridged.
 
 Only operate the door when it is visible and clear. Keep the opener's original obstruction sensors enabled. Add a reed switch if the UI needs reliable open/closed state.
 
-## Local development
+## Deploying the frontend
 
-Run the relay and frontend in separate terminals:
-
-```sh
-GARAGE_API_KEY=your-key npm run relay
-VITE_GARAGE_WEBSOCKET_URL=ws://localhost:8080/garage npm run dev
-```
+The Supabase Edge Function URL is already configured in `src/Garage.jsx`. Pushes to `main` trigger the existing Netlify deployment. No extra Netlify environment variable is required for Supabase.
