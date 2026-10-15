@@ -29,7 +29,13 @@ export default function Garage() {
       .then((data) => {
         if (cancelled) return
         setStatus(data.status === 'pending' ? 'sending' : 'idle')
-        setMessage(data.status === 'pending' ? 'Command waiting for the garage' : 'Connected securely')
+        setMessage(
+          data.status === 'pending'
+            ? 'Command waiting for the garage'
+            : data.status === 'expired'
+              ? 'Previous command expired — you can try again'
+              : 'Connected securely'
+        )
       })
       .catch((error) => {
         if (cancelled) return

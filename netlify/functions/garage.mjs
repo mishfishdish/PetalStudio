@@ -27,6 +27,9 @@ export default async (request) => {
   if (request.method === 'GET') {
     const isDevice = new URL(request.url).searchParams.get('device') === '1'
     if (!isDevice) {
+      if (state?.status === 'pending' && state.expiresAt <= now) {
+        return json({ status: 'expired' })
+      }
       return json(state || { status: 'idle' })
     }
 

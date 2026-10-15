@@ -48,6 +48,8 @@ void pulseRelay() {
 
 bool postAcknowledgement(const String& commandId) {
   HTTPClient http;
+  http.setConnectTimeout(15000);
+  http.setTimeout(20000);
   const String url = String("https://") + NETLIFY_HOST + "/api/garage";
   if (!http.begin(secureClient, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + GARAGE_API_KEY);
@@ -59,6 +61,8 @@ bool postAcknowledgement(const String& commandId) {
 
 void pollForCommand() {
   HTTPClient http;
+  http.setConnectTimeout(15000);
+  http.setTimeout(20000);
   const String url = String("https://") + NETLIFY_HOST + "/api/garage?device=1";
   if (!http.begin(secureClient, url)) return;
   http.addHeader("Authorization", String("Bearer ") + GARAGE_API_KEY);
@@ -83,7 +87,11 @@ void pollForCommand() {
   }
 
   if (status != 204) {
-    Serial.printf("Poll failed with HTTP %d\n", status);
+    Serial.printf(
+      "Poll failed: %s (%d)\n",
+      HTTPClient::errorToString(status).c_str(),
+      status
+    );
   }
   http.end();
 }
