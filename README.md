@@ -1,47 +1,78 @@
 # PetalStudio garage control
 
-PetalStudio includes a private `/garage` page that sends a short-lived command to a Netlify Function. An ESP32 or ESP8266 polls the function and briefly closes a dry-contact relay wired in parallel with the garage wall button.
+The `/garage` page and ESP controller communicate through an authenticated, persistent WebSocket. Commands are pushed immediately; there is no HTTP polling or command queue.
 
-## 1. Configure Netlify
+## Architecture
 
-Deploy this repository normally, then create a Netlify environment variable named `GARAGE_API_KEY` (scope: Functions). Use a long random value, for example:
-
-```sh
-openssl rand -hex 32
+```text
+Netlify /garage ──wss──┐
+                       ├── WebSocket relay ── command/ack
+ESP32 controller ─wss──┘
 ```
 
-Trigger a new deploy after adding the variable. Do not put the key in `netlify.toml`, source code, or a Vite environment variable.
+Netlify hosts the frontend only. A long-running WebSocket relay must be deployed to a WebSocket-capable service. `relay/server.mjs` and `render.yaml` are provided for Render.
 
-## 2. Configure the ESP
+## 1. Deploy the WebSocket relay
 
-1. Install ESP32 or ESP8266 board support in Arduino IDE.
-2. Copy `firmware/garage_controller/secrets.h.example` to `secrets.h`.
-3. Add your Wi-Fi, Netlify hostname, and the same `GARAGE_API_KEY`.
-4. Confirm `RELAY_PIN`, `RELAY_ACTIVE`, and `RELAY_IDLE` match your relay board.
-5. Upload `garage_controller.ino` and check the serial monitor at 115200 baud.
+1. In Render, create a Blueprint from this GitHub repository using `render.yaml`.
+2. When prompted for `GARAGE_API_KEY`, paste the existing generated garage key.
+3. Deploy the service and copy its hostname, for example `petalstudio-garage-relay.onrender.com`.
+4. Its health URL should return JSON: `https://YOUR-RELAY.onrender.com/`.
+5. Its WebSocket URL is `wss://YOUR-RELAY.onrender.com/garage`.
 
-Use a dry-contact, opto-isolated relay. Connect its normally-open contacts across the opener's low-voltage wall-button terminals—not to mains voltage or the garage motor. Some modern openers use encoded wall controls and require a compatible interface or a spare remote whose button contacts can be bridged.
+Keep the relay at one instance. It stores only live connections in memory and does not store commands. If the ESP is offline, the button reports that the controller is offline and nothing is queued.
 
-## 3. Use it
+## 2. Configure Netlify
 
-Open `https://your-site.netlify.app/garage`, enter the shared access key, and press **Open / close**. The key is kept only in `sessionStorage`, so closing the browser tab forgets it.
+Add this build environment variable and redeploy:
 
-## Security and safety
+```text
+VITE_GARAGE_WEBSOCKET_URL=wss://YOUR-RELAY.onrender.com/garage
+```
 
-- Commands expire after 30 seconds and the API enforces an 8-second cooldown.
-- The relay always returns to its idle state after 500 ms and is set idle before Wi-Fi connects.
-- The ESP makes outbound requests only; do not port-forward it or expose it as a public server.
-- The starter sketch calls `setInsecure()`: traffic is encrypted, but the ESP does not verify Netlify's identity. Before permanent use, install the correct CA certificate with `setCACert(...)` for your board/core and remove `setInsecure()`. Certificate handling differs between ESP32 and ESP8266 Arduino cores.
-- This control reports command delivery, not the physical position of the door. Add a reed switch before presenting “open/closed” state in the UI.
-- Only operate the door when it is visible and clear. Keep the opener's original obstruction sensors enabled.
+The frontend asks for the garage access key at runtime and keeps it only in `sessionStorage`. Do not put `GARAGE_API_KEY` in a `VITE_` variable, because Vite variables are public browser code.
+
+## 3. Configure the ESP
+
+Install these in Arduino IDE:
+
+- ESP32 or ESP8266 board support
+- **WebSockets by Markus Sattler** (`arduinoWebSockets`)
+
+Copy `firmware/garage_controller/secrets.h.example` to `secrets.h`, then configure:
+
+```cpp
+#define WIFI_SSID "your-wifi-name"
+#define WIFI_PASSWORD "your-wifi-password"
+#define GARAGE_API_KEY "same-key-used-on-render"
+#define WEBSOCKET_HOST "YOUR-RELAY.onrender.com"
+#define WEBSOCKET_PORT 443
+#define WEBSOCKET_PATH "/garage"
+```
+
+Upload `garage_controller.ino` and open Serial Monitor at 115200 baud. A healthy connection prints:
+
+```text
+Connected. IP: 192.168.x.x
+WebSocket connected — authenticating
+WebSocket authenticated and ready
+```
+
+## Relay wiring and safety
+
+The sketch uses GPIO 26 and produces a 500 ms active-low pulse. Use a dry-contact, opto-isolated relay wired across the opener's low-voltage wall-button terminals. Never connect the ESP to mains voltage or directly to the motor. Some encoded wall controls require a compatible interface or a spare remote whose button contacts can be bridged.
+
+The relay returns to idle after every pulse and starts idle before networking. Commands contain unique IDs so duplicate WebSocket delivery cannot pulse twice during one ESP session. The relay does not store commands, which prevents an old command from operating the door after the controller reconnects.
+
+The starter firmware calls `beginSSL` without a CA certificate: traffic is encrypted, but the ESP does not validate the relay certificate. Before permanent use, switch to the library's CA-certificate or certificate-bundle setup for your selected ESP Arduino core.
+
+Only operate the door when it is visible and clear. Keep the opener's original obstruction sensors enabled. Add a reed switch if the UI needs reliable open/closed state.
 
 ## Local development
 
-Use the Netlify CLI so the function and Blobs context are available:
+Run the relay and frontend in separate terminals:
 
 ```sh
-npm install
-npx netlify dev
+GARAGE_API_KEY=your-key npm run relay
+VITE_GARAGE_WEBSOCKET_URL=ws://localhost:8080/garage npm run dev
 ```
-
-Set `GARAGE_API_KEY` in a local `.env` file (which should remain uncommitted), then visit the printed local `/garage` URL.

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: petalstudio-garage-relay
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run relay
+    healthCheckPath: /
+    envVars:
+      - key: GARAGE_API_KEY
+        sync: false
