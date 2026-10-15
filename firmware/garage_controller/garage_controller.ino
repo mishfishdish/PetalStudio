@@ -52,7 +52,7 @@ String jsonStringValue(const String& json, const String& field) {
 }
 
 void joinRealtimeChannel() {
-  const String join = String("{\"topic\":\"") + realtimeTopic
+  String join = String("{\"topic\":\"") + realtimeTopic
     + "\",\"event\":\"phx_join\",\"payload\":{\"config\":{"
       "\"broadcast\":{\"ack\":false,\"self\":false},"
       "\"presence\":{\"enabled\":false},"
@@ -62,8 +62,9 @@ void joinRealtimeChannel() {
 }
 
 void sendPhoenixHeartbeat() {
-  const String ref = String(++messageRef);
-  webSocket.sendTXT(String("{\"topic\":\"phoenix\",\"event\":\"heartbeat\",\"payload\":{},\"ref\":\"") + ref + "\"}");
+  String ref = String(++messageRef);
+  String heartbeat = String("{\"topic\":\"phoenix\",\"event\":\"heartbeat\",\"payload\":{},\"ref\":\"") + ref + "\"}";
+  webSocket.sendTXT(heartbeat);
   lastHeartbeat = millis();
 }
 
