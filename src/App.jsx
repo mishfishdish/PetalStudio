@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import daydreamIcon from './assets/daydream-icon.png'
 import FlowerBooth from './FlowerBooth'
+import Garage from './Garage'
 
 function Home() {
   return (
@@ -147,9 +148,11 @@ function About() {
 }
 
 function App() {
+  const [activeTab, setActiveTab] = useState('home')
   const path = typeof window !== 'undefined' ? window.location.pathname : '/'
   const isPrivacyRoute = path === '/daydream-privacy'
   const isFlowerRoute = path === '/flowerbooth'
+  const isGarageRoute = path === '/garage' || path === '/garage/'
 
   if (isPrivacyRoute) {
     return (
@@ -171,7 +174,9 @@ function App() {
     )
   }
 
-  const [activeTab, setActiveTab] = useState('home')
+  if (isGarageRoute) {
+    return <Garage />
+  }
 
   return (
     <div className="app">
